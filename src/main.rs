@@ -1,4 +1,4 @@
-use std::io::{self, Read, Result};
+use std::io::{self, stdin, Read, Result};
 use std::os::fd::AsRawFd;
 use std::os::unix::io::RawFd;
 use std::slice::from_mut;
@@ -10,14 +10,17 @@ fn main() {
     let original_termios = termios.clone();
     let _ = enable_raw_mode(stdin_fd, &mut termios);
 
-    let mut c: u8 = 0;
-    while io::stdin().read(from_mut(&mut c)).is_ok() && c != b'q' {
-        // Continue reading until 'q' is entered
+    loop {
+        let mut c: u8 = 0;
+        stdin().read(from_mut(&mut c)).expect("Invalid");
         if c.is_ascii_control() {
-            println!("{}", c);
+            println!("{}\r\n", c);
         } else {
-            println!("{} ('{}')", c, c as char);
+            println!("{} ('{}')\r\n", c, c as char);
         }
+        if c == b'q' {
+            break 
+        };
     }
 
     disable_raw_mode(stdin_fd, &original_termios).unwrap();
@@ -29,7 +32,16 @@ fn disable_raw_mode(fd: RawFd, original_termios: &Termios) -> Result<()> {
 }
 
 fn enable_raw_mode(fd: RawFd, termios: &mut Termios) -> Result<()> {
-    termios.c_lflag &= !(ECHO | ICANON);
+    termios.c_iflag &= !(ICRNL | IXON);
+    termios.c_oflag &= !(OPOST);
+    termios.c_lflag &= !(ECHO | ICANON | ISIG | IEXTEN);
+
+    termios.c_cc[VMIN] = 0;
+    termios.c_cc[VTIME] = 1;
+
     tcsetattr(fd, TCSAFLUSH, termios)?;
     Ok(())
 }
+
+
+
